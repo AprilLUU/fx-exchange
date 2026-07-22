@@ -15,7 +15,6 @@ services:
 
     volumes:
       - fx-db-data:/var/lib/mysql
-      - ./fx-app-spring/ops/fxdb-seed.sql:/docker-entrypoint-initdb.d/01-seed.sql:ro
 
     healthcheck:
       test:
