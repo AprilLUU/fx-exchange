@@ -1,68 +1,82 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>FX Monitor</title>
-  <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: system-ui, sans-serif; background: #0f172a; color: #e2e8f0; padding: 2rem; }
-    h1 { font-size: 1.5rem; margin-bottom: 1.5rem; color: #f8fafc; }
-    .header { display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
-    .badge {
-      display: inline-flex; align-items: center; gap: 0.4rem;
-      padding: 0.3rem 0.75rem; border-radius: 9999px; font-size: 0.8rem; font-weight: 600;
-    }
-    #health-badge { background: #1e293b; }
-    .dot { width: 10px; height: 10px; border-radius: 50%; background: #475569; }
-    .dot.green { background: #22c55e; }
-    .dot.red   { background: #ef4444; }
-    #poll-count { color: #94a3b8; font-size: 0.85rem; }
-    table { width: 100%; border-collapse: collapse; background: #1e293b; border-radius: 0.5rem; overflow: hidden; }
-    th { text-align: left; padding: 0.65rem 1rem; background: #0f172a; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; }
-    td { padding: 0.65rem 1rem; border-top: 1px solid #0f172a; font-size: 0.9rem; }
-    tr:hover td { background: #263047; }
-    .rate { font-variant-numeric: tabular-nums; font-weight: 600; color: #38bdf8; }
-    .date { color: #64748b; font-size: 0.8rem; }
-    .accepting-section { margin-top: 1.5rem; padding: 1rem; background: #1e293b; border-radius: 0.5rem; }
-    .accepting-section h2 { font-size: 1rem; margin-bottom: 0.75rem; color: #94a3b8; }
-    .accepting-banner { font-size: 0.8rem; color: #f59e0b; margin-top: 0.5rem; }
-    #toggle-btn {
-      padding: 0.5rem 1.2rem; border: none; border-radius: 0.375rem; cursor: pointer;
-      font-size: 0.9rem; font-weight: 600; background: #334155; color: #94a3b8;
-    }
-    #toggle-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-    #empty-msg { color: #475569; padding: 1rem; }
-  </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>fx-monitor — live rates</title>
+  <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <h1>FX Monitor</h1>
-  <div class="header">
-    <div id="health-badge" class="badge">
+  <header>
+    <div class="brand">
       <span class="dot" id="health-dot"></span>
-      <span id="health-text">checking…</span>
+      <h1>fx-monitor</h1>
+      <span class="sub">live view of <code>fx-app-spring</code></span>
     </div>
-    <span id="poll-count">polls: 0</span>
-  </div>
 
-  <table>
-    <thead>
-      <tr>
-        <th>Pair</th>
-        <th>Rate</th>
-        <th>Date</th>
-      </tr>
-    </thead>
-    <tbody id="rates-body">
-      <tr><td colspan="3" id="empty-msg">Loading…</td></tr>
-    </tbody>
-  </table>
+    <div class="controls">
+      <div class="toggle-wrap">
+        <span class="toggle-label">ACCEPTING</span>
+        <button id="toggle" class="toggle" disabled aria-pressed="false">
+          <span class="knob"></span>
+        </button>
+        <span id="toggle-state" class="toggle-state">…</span>
+      </div>
+    </div>
+  </header>
 
-  <div class="accepting-section">
-    <h2>Trade Accepting</h2>
-    <button id="toggle-btn" disabled>ACCEPTING</button>
-    <div class="accepting-banner" id="accepting-banner"></div>
-  </div>
+  <main>
+    <div id="banner" class="banner hidden"></div>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Latest rate per pair</h2>
+        <span id="updated" class="updated">waiting for first poll…</span>
+      </div>
+
+      <table id="rates">
+        <thead>
+          <tr>
+            <th>Pair</th>
+            <th class="num">Rate</th>
+            <th class="num">Last change</th>
+            <th class="spark">Trend</th>
+            <th class="when">As of</th>
+          </tr>
+        </thead>
+        <tbody id="rates-body">
+          <tr class="empty"><td colspan="5">No data yet.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="panel meta">
+      <h2>Feed</h2>
+      <dl>
+        <div><dt>Updates received</dt><dd id="update-count">0</dd></div>
+        <div><dt>Feed interval</dt><dd id="interval">—</dd></div>
+        <div><dt>Last update</dt><dd id="since">—</dd></div>
+        <div><dt>API</dt><dd id="api-state">checking…</dd></div>
+      </dl>
+      <p class="hint">
+        This page is served by nginx, which proxies <code>/api</code> and <code>/health</code>
+        to <code>fx-app-spring</code> inside the compose network — so the browser only ever
+        talks to one origin. The trend line holds the last ~90 seconds this page has seen;
+        it starts empty on reload, because the history lives in the browser, not the database.
+        <br><br>
+        <strong>Feed interval</strong> is the gap between the last two batches that actually
+        landed, taken from the server's own <code>captured_at</code> — so it reads about
+        <strong>2s</strong> while ACCEPTING is ON. Switch ACCEPTING <strong>OFF</strong> and
+        nothing is stored at all, so updates stop dead: <strong>Last update</strong> climbs and
+        goes amber, and the interval simply holds its last value. The orchestrator is still
+        calling every 10s — you can see that in <code>docker compose logs -f fx-orchestrator</code>,
+        not here, because a declined batch leaves no trace in the data.
+        This page polls once a second regardless, and most of those polls find nothing new —
+        which is why the poll count is not the interesting number
+        (<span id="poll-count">0</span> so far).
+      </p>
+    </section>
+  </main>
 
   <script src="app.js"></script>
 </body>
